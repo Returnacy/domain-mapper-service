@@ -1,0 +1,20 @@
+{
+  "name": "domain-mapper-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/app.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/src/app.js"
+  },
+  "dependencies": {
+    "fastify": "^4.26.2",
+    "fastify-cors": "^8.4.2"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.4.5",
+    "@types/node": "^20.12.7"
+  }
+}
