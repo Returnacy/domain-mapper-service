@@ -1,18 +1,64 @@
 import Fastify from 'fastify';
 import fs from 'fs';
 import path from 'path';
+import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose';
 
 const app = Fastify({ logger: true });
 
-// Simple allow-list guard: require Authorization header for non-health endpoints if ENFORCE_AUTH=true
+// Optional JWT validation using Keycloak JWKs when ENFORCE_AUTH=true
+const enforceAuth = String(process.env.ENFORCE_AUTH || 'true').toLowerCase() !== 'false';
+const issuerEnv = process.env.OIDC_ISSUER
+  || ((process.env.KEYCLOAK_BASE_URL && process.env.KEYCLOAK_REALM)
+    ? `${process.env.KEYCLOAK_BASE_URL}/realms/${process.env.KEYCLOAK_REALM}`
+    : undefined);
+const audienceEnv = (process.env.KEYCLOAK_AUDIENCE || '').trim();
+const allowedClients = (process.env.ALLOWED_CLIENT_IDS || '')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+
+let jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
+if (enforceAuth && issuerEnv) {
+  try {
+    const jwksUrl = new URL(`${issuerEnv}/protocol/openid-connect/certs`);
+    jwks = createRemoteJWKSet(jwksUrl);
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn('domain-mapper: failed to initialize JWKS', e);
+  }
+}
+
 app.addHook('onRequest', async (request, reply) => {
   if (request.url.startsWith('/health')) return;
-  const enforce = String(process.env.ENFORCE_AUTH || 'true').toLowerCase() !== 'false';
-  if (enforce) {
-    const auth = request.headers['authorization'] || request.headers['Authorization' as any];
-    if (!auth || typeof auth !== 'string' || !auth.toLowerCase().startsWith('bearer ')) {
-      reply.code(403).send({ error: 'FORBIDDEN' });
+  if (!enforceAuth) return;
+
+  const auth = (request.headers['authorization'] || request.headers['Authorization' as any]) as string | undefined;
+  if (!auth || typeof auth !== 'string' || !auth.toLowerCase().startsWith('bearer ')) {
+    return reply.code(401).send({ error: 'UNAUTHORIZED' });
+  }
+
+  const token = auth.slice(7).trim();
+
+  // If JWKS is not configured, fall back to header presence check
+  if (!jwks || !issuerEnv) return;
+
+  try {
+    const verifyOpts: Record<string, any> = { issuer: issuerEnv };
+    if (audienceEnv) verifyOpts.audience = audienceEnv.split(',').map(s => s.trim()).filter(Boolean);
+    const { payload } = await jwtVerify(token, jwks, verifyOpts);
+
+    // Optional allow-list of client ids (for client-credential tokens 'azp' is the client id)
+    if (allowedClients.length > 0) {
+      const clientId = (payload as JWTPayload & { azp?: string; clientId?: string }).azp
+        || (payload as any).clientId
+        || (payload as any).client_id;
+      if (!clientId || !allowedClients.includes(String(clientId))) {
+        return reply.code(403).send({ error: 'FORBIDDEN_CLIENT' });
+      }
     }
+  } catch (err) {
+    request.log.warn({ err }, 'JWT verification failed');
+    return reply.code(401).send({ error: 'UNAUTHORIZED' });
   }
 });
 
