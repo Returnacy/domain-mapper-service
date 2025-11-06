@@ -3,6 +3,8 @@ import fs from 'fs';
 import path from 'path';
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose';
 
+type DomainInfo = { brandId: string | null; businessId?: string | null };
+
 const app = Fastify({ logger: true });
 
 // Optional JWT validation using Keycloak JWKs when ENFORCE_AUTH=true
@@ -62,7 +64,7 @@ app.addHook('onRequest', async (request, reply) => {
   }
 });
 
-function loadMapping(): Record<string, { brandId: string | null; businessId: string }> {
+function loadMapping(): Record<string, DomainInfo> {
   // Load from env override or common locations
   const candidates: string[] = [];
   if (process.env.DOMAIN_MAPPING_FILE) candidates.push(process.env.DOMAIN_MAPPING_FILE);
@@ -106,7 +108,7 @@ app.get('/api/v1/resolve', async (request, reply) => {
   const host = rawHost.toLowerCase().split(':')[0];
   if (!host) return reply.code(400).send({ error: 'host required' });
   const map = loadMapping();
-  const info = (map as any)[host];
+  const info = (map as any)[host] as DomainInfo | undefined;
   if (!info) return reply.code(404).send({ error: 'NOT_FOUND' });
   return { host, ...info };
 });
@@ -116,7 +118,7 @@ app.get('/api/v1/business/:businessId', async (request, reply) => {
   const { businessId } = request.params as any;
   if (!businessId) return reply.code(400).send({ error: 'businessId required' });
   const map = loadMapping();
-  const entries = Object.entries(map).filter(([_, v]) => (v as any)?.businessId === businessId);
+  const entries = Object.entries(map).filter(([_, v]) => (v as DomainInfo | undefined)?.businessId === businessId);
   if (entries.length === 0) return reply.code(404).send({ error: 'NOT_FOUND' });
   const ranked = entries
     .map(([host, v]) => ({ host, v, score: scoreHostPreference(host) }))
