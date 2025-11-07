@@ -3,7 +3,29 @@ import fs from 'fs';
 import path from 'path';
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose';
 
-type DomainInfo = { brandId: string | null; businessId?: string | null };
+type ServiceHosts = Record<string, string>;
+
+type DomainMappingEntry = {
+  label: string;
+  brandId: string | null;
+  businessId: string | null;
+  services: ServiceHosts;
+};
+
+type HostInfo = {
+  key: string;
+  host: string;
+  original: string;
+  service: string | null;
+  label: string;
+  brandId: string | null;
+  businessId: string | null;
+};
+
+type DomainMappingCache = {
+  entries: DomainMappingEntry[];
+  hostIndex: Record<string, HostInfo[]>;
+};
 
 const app = Fastify({ logger: true });
 
@@ -64,20 +86,71 @@ app.addHook('onRequest', async (request, reply) => {
   }
 });
 
-function loadMapping(): Record<string, DomainInfo> {
-  // Load from env override or common locations
+function normalizeHostKey(value: string): { key: string; literal: string } {
+  const trimmed = value.trim();
+  if (!trimmed) return { key: '', literal: '' };
+  const withoutScheme = trimmed.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '');
+  const hostSegment = withoutScheme.split('/')[0] ?? withoutScheme;
+  const sanitized = hostSegment.trim();
+  return { key: sanitized.toLowerCase(), literal: sanitized };
+}
+
+function parseMapping(raw: unknown): DomainMappingCache {
+  const entries: DomainMappingEntry[] = [];
+  const hostIndex: Record<string, HostInfo[]> = {};
+
+  const iterable: Array<[string, any]> = Array.isArray(raw)
+    ? raw.map((item, idx) => [String(item?.label ?? idx), item])
+    : raw && typeof raw === 'object'
+      ? Object.entries(raw as Record<string, any>)
+      : [];
+
+  for (const [key, value] of iterable) {
+    if (!value || typeof value !== 'object') continue;
+    const label = typeof value.label === 'string' && value.label.trim().length ? value.label.trim() : key;
+    const brandId = value.brandId ?? null;
+    const businessId = value.businessId ?? null;
+    const services: ServiceHosts = {};
+
+    for (const [serviceKey, serviceValue] of Object.entries(value)) {
+      if (['brandId', 'businessId', 'label'].includes(serviceKey)) continue;
+      if (typeof serviceValue !== 'string' || serviceValue.trim().length === 0) continue;
+      const normalized = normalizeHostKey(serviceValue);
+      if (!normalized.key) continue;
+      services[serviceKey] = serviceValue.trim();
+      const info: HostInfo = {
+        key: normalized.key,
+        host: normalized.literal,
+        original: serviceValue.trim(),
+        service: serviceKey,
+        label,
+        brandId: brandId ?? null,
+        businessId: businessId ?? null,
+      };
+      if (!hostIndex[normalized.key]) hostIndex[normalized.key] = [];
+      hostIndex[normalized.key].push(info);
+    }
+
+    entries.push({ label, brandId: brandId ?? null, businessId: businessId ?? null, services });
+  }
+
+  return { entries, hostIndex };
+}
+
+function loadMapping(): DomainMappingCache {
   const candidates: string[] = [];
   if (process.env.DOMAIN_MAPPING_FILE) candidates.push(process.env.DOMAIN_MAPPING_FILE);
   candidates.push(path.resolve(process.cwd(), 'domain-mapping.json'));
   const filePath = candidates.find(p => {
     try { return fs.existsSync(p); } catch { return false; }
   });
-  if (!filePath) return {} as any;
+  if (!filePath) return { entries: [], hostIndex: {} };
   try {
     const raw = fs.readFileSync(filePath, 'utf-8');
-    return JSON.parse(raw);
-  } catch {
-    return {} as any;
+    return parseMapping(JSON.parse(raw));
+  } catch (err) {
+    app.log.error({ err }, 'domain-mapper: failed to parse domain mapping file');
+    return { entries: [], hostIndex: {} };
   }
 }
 
@@ -94,10 +167,24 @@ function scoreHostPreference(value: string): number {
 
 function deriveUrlFromHost(host: string, scheme?: string): string {
   if (!host) return '';
-  if (host.startsWith('http://') || host.startsWith('https://')) return host;
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(host)) return host.replace(/\/+$/u, '');
   const sch = (scheme || process.env.BUSINESS_SERVICE_URL_SCHEME || 'https').toString();
   return `${sch}://${host}`;
 }
+
+function pickPreferredHost(entry: DomainMappingEntry): { host: string; service: string | null } | null {
+  const priorities = ['business-service', 'api', 'backend', 'service'];
+  for (const key of priorities) {
+    const candidate = entry.services[key];
+    if (candidate) return { host: candidate, service: key };
+  }
+  const firstKey = Object.keys(entry.services)[0];
+  if (!firstKey) return null;
+  return { host: entry.services[firstKey], service: firstKey };
+}
+
+const mappingCache = loadMapping();
+app.log.info({ entries: mappingCache.entries.length }, 'domain-mapper: loaded domain mappings');
 
 app.get('/health', async () => ({ status: 'ok' }));
 
@@ -105,37 +192,65 @@ app.get('/health', async () => ({ status: 'ok' }));
 app.get('/api/v1/resolve', async (request, reply) => {
   const q = request.query as any;
   const rawHost = (q.host as string | undefined) || '';
-  const host = rawHost.toLowerCase().split(':')[0];
-  if (!host) return reply.code(400).send({ error: 'host required' });
-  const map = loadMapping();
-  const info = (map as any)[host] as DomainInfo | undefined;
-  if (!info) return reply.code(404).send({ error: 'NOT_FOUND' });
-  return { host, ...info };
+  const normalized = normalizeHostKey(rawHost);
+  if (!normalized.key) return reply.code(400).send({ error: 'host required' });
+  const infos = mappingCache.hostIndex[normalized.key];
+  if (!infos || infos.length === 0) return reply.code(404).send({ error: 'NOT_FOUND' });
+  const info = infos[0];
+  return {
+    host: info.host,
+    originalHost: info.original,
+    service: info.service,
+    label: info.label,
+    brandId: info.brandId,
+    businessId: info.businessId,
+    url: deriveUrlFromHost(info.original || info.host),
+  };
 });
 
 // Reverse lookup: given businessId return preferred host and info
 app.get('/api/v1/business/:businessId', async (request, reply) => {
   const { businessId } = request.params as any;
   if (!businessId) return reply.code(400).send({ error: 'businessId required' });
-  const map = loadMapping();
-  const entries = Object.entries(map).filter(([_, v]) => (v as DomainInfo | undefined)?.businessId === businessId);
+  const entries = mappingCache.entries.filter(entry => entry.businessId === businessId);
   if (entries.length === 0) return reply.code(404).send({ error: 'NOT_FOUND' });
-  const ranked = entries
-    .map(([host, v]) => ({ host, v, score: scoreHostPreference(host) }))
+
+  const candidates: Array<{ host: string; service: string | null; label: string }> = [];
+  for (const entry of entries) {
+    const preferred = pickPreferredHost(entry);
+    if (preferred) {
+      candidates.push({ host: preferred.host, service: preferred.service, label: entry.label });
+    }
+    for (const [serviceKey, host] of Object.entries(entry.services)) {
+      candidates.push({ host, service: serviceKey, label: entry.label });
+    }
+  }
+
+  if (candidates.length === 0) return reply.code(404).send({ error: 'NOT_FOUND' });
+
+  const ranked = candidates
+    .map(candidate => ({ candidate, score: scoreHostPreference(candidate.host) }))
     .sort((a, b) => b.score - a.score);
-  const best = ranked[0];
+
+  const best = ranked[0].candidate;
   return {
     host: best.host,
+    service: best.service,
     url: deriveUrlFromHost(best.host),
-    businessId: (best.v as any).businessId,
-    brandId: (best.v as any).brandId ?? null,
+    businessId,
+    brandId: entries[0].brandId,
+    label: entries[0].label,
   };
 });
 
 // List all mappings
 app.get('/api/v1/businesses', async () => {
-  const map = loadMapping();
-  return Object.entries(map).map(([host, v]) => ({ host, ...(v as any), url: deriveUrlFromHost(host) }));
+  return mappingCache.entries.map(entry => ({
+    label: entry.label,
+    brandId: entry.brandId,
+    businessId: entry.businessId,
+    services: entry.services,
+  }));
 });
 
 const port = Number(process.env.PORT || 4005);
