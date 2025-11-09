@@ -5,11 +5,11 @@
     "frontend-spa": "fidelity.chepizzadasalva.it",
     "business-service": "fidelity.business.chepizzadasalva.it"
   },
-  "pizzalonga-roma": {
+  "pizzalonga-treviso": {
     "brandId": "d290f1ee-6c54-4b01-90e6-d701748f0851",
     "businessId": "c1a4d3f4-4f4b-4e2d-9c3a-5f8e2b2c3d4e",
-    "frontend-spa": "roma.pizzalonga.returnacy.app",
-    "business-service": "roma.pizzalonga.business.returnacy.app"
+    "frontend-spa": "treviso.pizzalonga.returnacy.app",
+    "business-service": "treviso.pizzalonga.business.returnacy.app"
   },
   "pizzalonga-vicenza": {
     "brandId": "d290f1ee-6c54-4b01-90e6-d701748f0851",
