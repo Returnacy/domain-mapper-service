@@ -20,6 +20,7 @@
   "pizzalonga-brand": {
     "brandId": "d290f1ee-6c54-4b01-90e6-d701748f0851",
     "businessId": null,
-    "frontend-spa": "pizzalonga.returnacy.app"
+    "frontend-spa": "pizzalonga.returnacy.app",
+    "business-service": "pizzalonga.business.returnacy.app"
   }
 }
