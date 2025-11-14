@@ -9,13 +9,13 @@
     "brandId": "d290f1ee-6c54-4b01-90e6-d701748f0851",
     "businessId": "c1a4d3f4-4f4b-4e2d-9c3a-5f8e2b2c3d4e",
     "frontend-spa": "treviso.pizzalonga.returnacy.app",
-    "business-service": "treviso.pizzalonga.business.returnacy.app"
+    "business-service": "pizzalonga.business.returnacy.app"
   },
   "pizzalonga-vicenza": {
     "brandId": "d290f1ee-6c54-4b01-90e6-d701748f0851",
     "businessId": "e5f6g7h8-9i0j-1k2l-3m4n-5o6p7q8r9s0t",
     "frontend-spa": "vicenza.pizzalonga.returnacy.app",
-    "business-service": "vicenza.pizzalonga.business.returnacy.app"
+    "business-service": "pizzalonga.business.returnacy.app"
   },
   "pizzalonga-brand": {
     "brandId": "d290f1ee-6c54-4b01-90e6-d701748f0851",
