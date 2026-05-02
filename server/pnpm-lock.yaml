@@ -12,8 +12,8 @@ importers:
         specifier: ^4.26.2
         version: 4.29.1
       jose:
-        specifier: ^5.6.3
-        version: 5.10.0
+        specifier: ^6.0.13
+        version: 6.2.3
     devDependencies:
       '@types/node':
         specifier: ^20.12.7
@@ -286,8 +286,8 @@ packages:
     resolution: {integrity: sha512-0KI/607xoxSToH7GjN1FfSbLoU0+btTicjsQSWQlh/hZykN8KpmMf7uYwPW3R+akZ6R/w18ZlXSHBYXiYUPO3g==}
     engines: {node: '>= 0.10'}
 
-  jose@5.10.0:
-    resolution: {integrity: sha512-s+3Al/p9g32Iq+oqXxkW//7jk2Vig6FF1CFqzVXoTUXt2qz89YWbL+OwS17NFYEvxC35n0FKeGO2LGYSxeM2Gg==}
+  jose@6.2.3:
+    resolution: {integrity: sha512-YYVDInQKFJfR/xa3ojUTl8c2KoTwiL1R5Wg9YCydwH0x0B9grbzlg5HC7mMjCtUJjbQ/YnGEZIhI5tCgfTb4Hw==}
 
   json-schema-ref-resolver@1.0.1:
     resolution: {integrity: sha512-EJAj1pgHc1hxF6vo2Z3s69fMjO1INq6eGHXZ8Z6wCQeldCuwxGK9Sxf4/cScGn3FZubCVUehfWtcDM/PLteCQw==}
@@ -613,7 +613,7 @@ snapshots:
 
   ipaddr.js@1.9.1: {}
 
-  jose@5.10.0: {}
+  jose@6.2.3: {}
 
   json-schema-ref-resolver@1.0.1:
     dependencies:

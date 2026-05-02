@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "fastify": "^4.26.2",
-    "jose": "^5.6.3"
+    "jose": "^6.0.13"
   },
   "devDependencies": {
     "tsx": "^4.19.0",

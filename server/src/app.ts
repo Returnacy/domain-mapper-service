@@ -1,7 +1,7 @@
 import Fastify from 'fastify';
 import fs from 'fs';
 import path from 'path';
-import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose';
+import { createRemoteJWKSet, decodeJwt, jwtVerify, type JWTPayload } from 'jose';
 
 type ServiceHosts = Record<string, string>;
 
@@ -29,28 +29,46 @@ type DomainMappingCache = {
 
 const app = Fastify({ logger: true });
 
-// Optional JWT validation using Keycloak JWKs when ENFORCE_AUTH=true
+// JWT validation: dual-issuer (Keycloak + self-issued user-service) when ENFORCE_AUTH=true
 const enforceAuth = String(process.env.ENFORCE_AUTH || 'true').toLowerCase() !== 'false';
-const issuerEnv = process.env.OIDC_ISSUER
+const keycloakIssuer = process.env.OIDC_ISSUER
   || ((process.env.KEYCLOAK_BASE_URL && process.env.KEYCLOAK_REALM)
     ? `${process.env.KEYCLOAK_BASE_URL}/realms/${process.env.KEYCLOAK_REALM}`
     : undefined);
+const selfIssuer = process.env.SELF_ISSUER?.trim();
+const selfIssuerJwksUrl = process.env.SELF_ISSUER_JWKS_URL?.trim();
 const audienceEnv = (process.env.KEYCLOAK_AUDIENCE || '').trim();
 const allowedClients = (process.env.ALLOWED_CLIENT_IDS || '')
   .split(',')
   .map(s => s.trim())
   .filter(Boolean);
 
-let jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
-if (enforceAuth && issuerEnv) {
+let keycloakJwks: ReturnType<typeof createRemoteJWKSet> | null = null;
+if (enforceAuth && keycloakIssuer) {
   try {
-    const jwksUrl = new URL(`${issuerEnv}/protocol/openid-connect/certs`);
-    jwks = createRemoteJWKSet(jwksUrl);
+    const jwksUrl = new URL(`${keycloakIssuer}/protocol/openid-connect/certs`);
+    keycloakJwks = createRemoteJWKSet(jwksUrl);
   } catch (e) {
     // eslint-disable-next-line no-console
-    console.warn('domain-mapper: failed to initialize JWKS', e);
+    console.warn('domain-mapper: failed to initialize Keycloak JWKS', e);
   }
 }
+
+let selfJwks: ReturnType<typeof createRemoteJWKSet> | null = null;
+if (enforceAuth && selfIssuer && selfIssuerJwksUrl) {
+  try {
+    selfJwks = createRemoteJWKSet(new URL(selfIssuerJwksUrl));
+    // eslint-disable-next-line no-console
+    console.log('domain-mapper: dual-issuer mode enabled, also accepting self-issued tokens from', selfIssuer);
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn('domain-mapper: failed to initialize self-issued JWKS', e);
+  }
+}
+
+const validIssuers: string[] = [];
+if (keycloakIssuer) validIssuers.push(keycloakIssuer);
+if (selfJwks && selfIssuer) validIssuers.push(selfIssuer);
 
 app.addHook('onRequest', async (request, reply) => {
   if (request.url.startsWith('/health')) return;
@@ -63,13 +81,23 @@ app.addHook('onRequest', async (request, reply) => {
 
   const token = auth.slice(7).trim();
 
-  // If JWKS is not configured, fall back to header presence check
-  if (!jwks || !issuerEnv) return;
+  // If no JWKS is configured at all, fall back to header presence check (preserves prior behavior)
+  if (!keycloakJwks && !selfJwks) return;
+
+  let tokenIss: string | undefined;
+  try {
+    tokenIss = decodeJwt(token).iss;
+  } catch {
+    // jwtVerify below will reject malformed tokens
+  }
+
+  const jwksToUse = (selfJwks && tokenIss && tokenIss === selfIssuer) ? selfJwks : keycloakJwks;
+  if (!jwksToUse) return reply.code(401).send({ error: 'UNAUTHORIZED' });
 
   try {
-    const verifyOpts: Record<string, any> = { issuer: issuerEnv };
+    const verifyOpts: Record<string, any> = { issuer: validIssuers };
     if (audienceEnv) verifyOpts.audience = audienceEnv.split(',').map(s => s.trim()).filter(Boolean);
-    const { payload } = await jwtVerify(token, jwks, verifyOpts);
+    const { payload } = await jwtVerify(token, jwksToUse, verifyOpts);
 
     // Optional allow-list of client ids (for client-credential tokens 'azp' is the client id)
     if (allowedClients.length > 0) {
