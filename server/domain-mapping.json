@@ -1,35 +1,41 @@
 {
   "chepizzadasalva": {
+    "label": "Che Pizza da Salva",
     "brandId": "385d4ebb-4c4b-46e9-8701-0d71bfd7ce47",
     "businessId": "af941888-ec4c-458e-b905-21673241af3e",
     "frontend-spa": "fidelity.chepizzadasalva.it",
     "business-service": "fidelity.business.chepizzadasalva.it"
   },
   "quieora": {
+    "label": "Pizzeria Qui è Ora 2.0",
     "brandId": "c8717beb-7298-4f97-b0b4-49c4cf5fd230",
     "businessId": "dfdca119-42a6-4783-b265-eaa16350346a",
     "frontend-spa": "quieora.returnacy.app",
     "business-service": "quieora.business.returnacy.app"
   },
   "sudest": {
+    "label": "Pizzeria Sud Est",
     "brandId": "d99f0f54-3367-4a7e-a3ab-67564c805e46",
     "businessId": "eb48c067-e914-4532-bd55-bd08766ac0a0",
     "frontend-spa": "sudest.returnacy.app",
     "business-service": "sudest.business.returnacy.app"
   },
   "pizzalonga-treviso": {
+    "label": "Pizzalonga Treviso",
     "brandId": "d290f1ee-6c54-4b01-90e6-d701748f0851",
     "businessId": "c1a4d3f4-4f4b-4e2d-9c3a-5f8e2b2c3d4e",
     "frontend-spa": "treviso.pizzalonga.returnacy.app",
     "business-service": "pizzalonga.business.returnacy.app"
   },
   "pizzalonga-vicenza": {
+    "label": "Pizzalonga Vicenza",
     "brandId": "d290f1ee-6c54-4b01-90e6-d701748f0851",
     "businessId": "80d40072-ce57-4829-ace4-e54dd568bc0e",
     "frontend-spa": "vicenza.pizzalonga.returnacy.app",
     "business-service": "pizzalonga.business.returnacy.app"
   },
   "pizzalonga-brand": {
+    "label": "Pizzalonga",
     "brandId": "d290f1ee-6c54-4b01-90e6-d701748f0851",
     "businessId": null,
     "frontend-spa": "pizzalonga.returnacy.app",
